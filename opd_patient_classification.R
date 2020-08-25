@@ -40,18 +40,18 @@ table(dat$class)
 
 #Histogram explain all the detail of all six variable
 
-s1<-ggplot(dat,aes(x=pelvic_incidence ))+geom_histogram(binwidth = 5, fill='blue') + theme_grey() +
+H1<-ggplot(dat,aes(x=pelvic_incidence ))+geom_histogram(binwidth = 5, fill='blue') + theme_grey() +
   scale_x_continuous(breaks= seq(0, 150, by=10))
-s2<-ggplot(dat,aes(x=pelvic_tilt.numeric ))+geom_histogram(binwidth = 5, fill='blue') + theme_grey() +
+H2<-ggplot(dat,aes(x=pelvic_tilt.numeric ))+geom_histogram(binwidth = 5, fill='blue') + theme_grey() +
   scale_x_continuous(breaks= seq(0, 150, by=10))
-s3<-ggplot(dat,aes(x=lumbar_lordosis_angle ))+geom_histogram(binwidth = 5, fill='blue') + theme_grey() +
+H3<-ggplot(dat,aes(x=lumbar_lordosis_angle ))+geom_histogram(binwidth = 5, fill='blue') + theme_grey() +
   scale_x_continuous(breaks= seq(0, 150, by=10))
-s4<-ggplot(dat,aes(x=sacral_slope ))+geom_histogram(binwidth = 5, fill='blue') + theme_grey() +
+H4<-ggplot(dat,aes(x=sacral_slope ))+geom_histogram(binwidth = 5, fill='blue') + theme_grey() +
   scale_x_continuous(breaks= seq(0, 150, by=10))
-s5<-ggplot(dat,aes(x=pelvic_radius ))+geom_histogram(binwidth = 5, fill='blue') + theme_grey() +
+H5<-ggplot(dat,aes(x=pelvic_radius ))+geom_histogram(binwidth = 5, fill='blue') + theme_grey() +
   scale_x_continuous(breaks= seq(0, 150, by=10))
-s6<-ggplot(dat,aes(x=degree_spondylolisthesis ))+geom_histogram(binwidth = 5, fill='blue') + theme_grey() 
-grid.arrange(s1,s2,s3,s4,s5,s6)
+H6<-ggplot(dat,aes(x=degree_spondylolisthesis ))+geom_histogram(binwidth = 5, fill='blue') + theme_grey() 
+grid.arrange(H1,H2,H3,H4,H5,H6)
 
 
 
@@ -179,17 +179,58 @@ caret_svm
 caret_boost <- train(class~pelvic_incidence+pelvic_tilt.numeric+lumbar_lordosis_angle+sacral_slope+pelvic_radius+degree_spondylolisthesis, data=dat, method='gbm', preProcess= c('center', 'scale'), trControl=trainControl(method="cv", number=7), verbose=FALSE)
 print(caret_boost)
 
+#Majority vote ensemble for all the three models
 
-#KNN Model to visualize the data
+#recodify  our value
+qualite<-c('Abnormal'=0,'Normal'=1)
+dat$class<-as.factor(revalue(dat$class,qualite))
+#Spliting training set into two parts based on outcome: 70% and 30%
+
 index <- sample(2,nrow(dat),replace= TRUE,prob=c(0.7,0.3))
 trainClean <- dat[index==1,]
 testClean <- dat[index==2,]
 
+
+# Random Forest model
+caret_matrix <- train(x=trainClean[,1:6], y=trainClean[,7], data=trainClean, method='rf', trControl=trainControl(method="cv", number=5))
+caret_matrix
+solution_rf <- predict(caret_matrix, testClean)
+
+
+
+# Support Vector Machine (SVM) model
+caret_svm <- train(x=trainClean[,1:6], y=trainClean[,7], data=trainClean, method='svmRadial', trControl=trainControl(method="cv", number=5))
+caret_svm
+solution_svm <- predict(caret_svm, testClean)
+
+#  Gradient Boosting Machine (GBM) model
+caret_boost <- train(class~pelvic_incidence+pelvic_tilt.numeric+lumbar_lordosis_angle+sacral_slope+pelvic_radius+degree_spondylolisthesis, data=trainClean, method='gbm', preProcess= c('center', 'scale'), trControl=trainControl(method="cv", number=7), verbose=FALSE)
+print(caret_boost)
+solution_boost <- predict(caret_boost, testClean)
+
+
+# Correlation between models
+
+
+#adding model predictions to test dataframe
+testClean$RF <- as.numeric(solution_rf)-1
+testClean$SVM <- as.numeric(solution_svm)-1
+testClean$Boost <- as.numeric(solution_boost)-1
+
+#compose correlations plot
+corrplot.mixed(cor(testClean[, c('RF', 'SVM', 'Boost')]), tl.col="black")
+testClean$Sum <- testClean$RF + testClean$SVM + testClean$Boost
+testClean$Majority <- ifelse(testClean$Sum<=1, 0,1)
+
+testClean$Sum <- testClean$RF + testClean$SVM + testClean$Boost
+testClean$Majority <- ifelse(testClean$Sum<=1, 0,1)
+
+#KNN Model to visualize the data
+
+
 caret_knn <- train(class~., data=dat, method='knn', trControl=trainControl(method="cv", number=5),tuneLength = 20)
 caret_knn
 
+#train
 caret_knn <- train(class~., data=trainClean, method='knn', trControl=trainControl(method="cv", number=5),tuneLength = 20)
-caret_knn
-
-caret_knn <- train(class~., data=testClean, method='knn', trControl=trainControl(method="cv", number=5),tuneLength = 20)
 caret_knn
